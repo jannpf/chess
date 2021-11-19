@@ -48,14 +48,14 @@ files['G'] = 6
 files['H'] = 7
 
 ranks = dict()
-ranks['1'] = 7
-ranks['2'] = 6
-ranks['3'] = 5
-ranks['4'] = 4
-ranks['5'] = 3
-ranks['6'] = 2
-ranks['7'] = 1
-ranks['8'] = 0
+ranks['1'] = 0
+ranks['2'] = 1
+ranks['3'] = 2
+ranks['4'] = 3
+ranks['5'] = 4
+ranks['6'] = 5
+ranks['7'] = 6
+ranks['8'] = 7
 
 pieceValues = dict()
 pieceValues['P'] = Piece.PAWN + Colour.WHITE
@@ -177,7 +177,7 @@ class Chess:
 
         fen_ranks = fen.split('/')
         rank = 0
-        for r in fen_ranks:
+        for r in reversed(fen_ranks):
             file = 0
             for f in r:
                 try:
@@ -191,7 +191,7 @@ class Chess:
     def get_fen(self) -> str:
         fen_ranks = []
 
-        for rank in self.board:
+        for rank in reversed(self.board):
             r = ''
             zeros = 0
 
@@ -211,7 +211,7 @@ class Chess:
 
     def __repr__(self) -> str:
         layout = ""
-        for r in self.board:
+        for r in reversed(self.board):
             for f in r:
                 square = '-'
                 if f in valuePieces:
@@ -257,12 +257,12 @@ class Chess:
     def _pawn_fields(self, start, colour) -> list:
         fields = []
         if colour == Colour.WHITE:
-            in_front = (start[0] - 1, start[1])
-            in_front2 = (start[0] - 2, start[1])
-            start_rank = ranks['2']
-        else:
             in_front = (start[0] + 1, start[1])
             in_front2 = (start[0] + 2, start[1])
+            start_rank = ranks['2']
+        else:
+            in_front = (start[0] - 1, start[1])
+            in_front2 = (start[0] - 2, start[1])
             start_rank = ranks['7']
 
         if self.board[in_front] == 0:
