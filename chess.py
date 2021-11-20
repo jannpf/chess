@@ -1,4 +1,4 @@
-from enum import IntFlag
+from enum import Flag
 
 import numpy as np
 
@@ -16,25 +16,44 @@ class NoPiecePresent(ChessException):
 
 
 class IllegalMove(ChessException):
-    """The given move is illegal"""""
+    """The given move is illegal"""
 
 
 class InvalidSquare(ChessException):
     """The square is out of the boundaries of the chess board"""
 
 
-class Piece(IntFlag):
-    PAWN = 1
-    KNIGHT = 2
-    BISHOP = 4
-    ROOK = 8
-    QUEEN = 16
-    KING = 32
+class PieceType(Flag):
+    PAWN = 'p'
+    KNIGHT = 'n'
+    BISHOP = 'b'
+    ROOK = 'r'
+    QUEEN = 'q'
+    KING = 'k'
 
 
-class Colour(IntFlag):
+class Colour(Flag):
     WHITE = 0
     BLACK = 64
+
+
+class Piece:
+    type = None
+    colour = None
+
+    def __init__(self, fen: str = ""):
+        if fen.isupper():
+            self.colour = Colour.WHITE
+        else:
+            self.colour = Colour.BLACK
+        for v in PieceType.__members__.values():
+            if v.value == fen.lower():
+                self.type = v
+
+    def get_fen(self):
+        if self.colour.value == Colour.BLACK:
+            return str.lower(self.type.value)
+        return self.type.value
 
 
 files = dict()
@@ -57,25 +76,9 @@ ranks['6'] = 5
 ranks['7'] = 6
 ranks['8'] = 7
 
-pieceValues = dict()
-pieceValues['P'] = Piece.PAWN + Colour.WHITE
-pieceValues['N'] = Piece.KNIGHT + Colour.WHITE
-pieceValues['B'] = Piece.BISHOP + Colour.WHITE
-pieceValues['R'] = Piece.ROOK + Colour.WHITE
-pieceValues['Q'] = Piece.QUEEN + Colour.WHITE
-pieceValues['K'] = Piece.KING + Colour.WHITE
-
-bPieces = dict()
-for x, y in pieceValues.items():
-    bPieces[str.lower(x)] = y + Colour.BLACK
-pieceValues.update(bPieces)
-
-# reverse version of the pieces dict
-valuePieces = {v: k for k, v in pieceValues.items()}
-
 
 class Chess:
-    board = np.zeros((8, 8), dtype=np.uint8)
+    board = np.empty((8, 8), dtype=Piece)
     toMove = Colour.WHITE
     enPassantTarget = None
     lastFen = ''
@@ -87,12 +90,12 @@ class Chess:
         start = self.str_to_coor(start_not)
         end = self.str_to_coor(end_not)
 
-        p = self.val_to_piece(self.board[start])
+        p = self.board[start]
 
         if not p:
             raise NoPiecePresent('No piece present')
 
-        if p[1] != self.toMove:
+        if p.colour != self.toMove:
             raise NotYourTurn('{colour} to move'.format(colour='White' if self.toMove == Colour.WHITE else 'Black'))
 
         if end_not not in self.legal_moves(start_not):
@@ -102,7 +105,7 @@ class Chess:
 
         # Clear possible en passant target, and add new one
         self.enPassantTarget = None
-        if p[0] == Piece.PAWN and abs(end[0] - start[0]) == 2:
+        if p.type == PieceType.PAWN and abs(end[0] - start[0]) == 2:
             self.enPassantTarget = end
 
         # end move
@@ -118,41 +121,41 @@ class Chess:
         self.lastFen = self.get_fen()
 
         # Remove pawn if taken en passant
-        if self.board[end] == 0 and p[0] == Piece.PAWN and end[1] != start[1]:
-            self.board[self.enPassantTarget] = 0
+        if not self.board[end] and p.type == PieceType.PAWN and end[1] != start[1]:
+            self.board[self.enPassantTarget] = None
 
         self.board[end] = self.board[start]
-        self.board[start] = 0
+        self.board[start] = None
 
     def _pop_move(self):
         self.set_fen(self.lastFen)
 
     def _reachable_fields(self, coordinate: tuple):
         fields = []
-        p = self.val_to_piece(self.board[coordinate])
+        p = self.board[coordinate]
         if not p:
             return fields
 
-        if p[0] == Piece.PAWN:
-            return self._pawn_fields(coordinate, p[1])
-        elif p[0] == Piece.KNIGHT:
-            return self._knight_fields(coordinate, p[1])
-        elif p[0] == Piece.BISHOP:
-            return self._bishop_fields(coordinate, p[1])
-        elif p[0] == Piece.ROOK:
-            return self._rook_fields(coordinate, p[1])
-        elif p[0] == Piece.QUEEN:
-            fields = self._bishop_fields(coordinate, p[1])
-            fields.extend(self._rook_fields(coordinate, p[1]))
-        elif p[0] == Piece.KING:
-            fields = self._king_fields(coordinate, p[1])
+        if p.type == PieceType.PAWN:
+            return self._pawn_fields(coordinate, p.colour)
+        elif p.type == PieceType.KNIGHT:
+            return self._knight_fields(coordinate, p.colour)
+        elif p.type == PieceType.BISHOP:
+            return self._bishop_fields(coordinate, p.colour)
+        elif p.type == PieceType.ROOK:
+            return self._rook_fields(coordinate, p.colour)
+        elif p.type == PieceType.QUEEN:
+            fields = self._bishop_fields(coordinate, p.colour)
+            fields.extend(self._rook_fields(coordinate, p.colour))
+        elif p.type == PieceType.KING:
+            fields = self._king_fields(coordinate, p.colour)
         return fields
 
     def legal_moves(self, square_not: str):
         lm = []
         coordinate = self.str_to_coor(square_not)
         rf = self._reachable_fields(coordinate)
-        p = self.val_to_piece(self.board[coordinate])
+        p = self.board[coordinate]
         if not p:
             return lm
 
@@ -161,7 +164,7 @@ class Chess:
             self._push_move(coordinate, f, p)
 
             # if the player is in check after the move, its illegal
-            if not self.in_check(p[1]):
+            if not self.in_check(p.colour):
                 lm.append(f)
 
             # revert the move
@@ -173,7 +176,7 @@ class Chess:
         self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
 
     def set_fen(self, fen: str):
-        self.board = np.zeros((8, 8), dtype=np.uint8)
+        self.board = np.empty((8, 8), dtype=Piece)
 
         fen_ranks = fen.split('/')
         rank = 0
@@ -183,8 +186,7 @@ class Chess:
                 try:
                     file += int(f)
                 except ValueError:
-                    value = pieceValues[f]
-                    self.board[rank, file] = value
+                    self.board[rank, file] = Piece(f)
                     file += 1
             rank += 1
 
@@ -196,13 +198,13 @@ class Chess:
             zeros = 0
 
             for square in rank:
-                if square in valuePieces:
+                if not square:
+                    zeros += 1
+                else:
                     if zeros > 0:
                         r += str(zeros)
                         zeros = 0
-                    r = r + valuePieces[square]
-                else:
-                    zeros += 1
+                    r += square.get_fen()
             if zeros > 0:
                 r += str(zeros)
             fen_ranks.append(r)
@@ -213,9 +215,9 @@ class Chess:
         layout = ""
         for r in reversed(self.board):
             for f in r:
-                square = '-'
-                if f in valuePieces:
-                    square = valuePieces[f]
+                square = ' - '
+                if f:
+                    square = f' {f.get_fen()} '
                 layout += square
             layout += '\n'
         return layout
@@ -238,22 +240,6 @@ class Chess:
             raise InvalidSquare(f'Invalid coordinate: {coordinate}')
         return str(file) + str(rank)
 
-    @staticmethod
-    def val_to_piece(value: int) -> tuple:
-        if value > 64:
-            c = Colour.BLACK
-        else:
-            c = Colour.WHITE
-        value -= c
-        for k, v in Piece.__members__.items():
-            if v == value:
-                return v, c
-        raise ChessException('Invalid piece value')
-
-    @staticmethod
-    def piece_to_val(p: Piece, c: Colour) -> int:
-        return p + c
-
     def _pawn_fields(self, start, colour) -> list:
         fields = []
         if colour == Colour.WHITE:
@@ -265,21 +251,21 @@ class Chess:
             in_front2 = (start[0] - 2, start[1])
             start_rank = ranks['7']
 
-        if self.board[in_front] == 0:
+        if not self.board[in_front]:
             fields.append(in_front)
             if start[0] == start_rank:
-                if self.board[in_front2] == 0:
+                if not self.board[in_front2]:
                     fields.append(in_front2)
 
         # Check the diagonals for opponent pieces
         diag1 = (in_front[0], in_front[1] - 1)
         diag2 = (in_front[0], in_front[1] + 1)
 
-        if in_front[1] > 0 and self.board[diag1] > 0:
-            if self.val_to_piece(self.board[diag1])[1] != colour:
+        if in_front[1] > 0 and self.board[diag1]:
+            if self.board[diag1].colour != colour:
                 fields.append(diag1)
-        if in_front[1] < 7 and self.board[diag2] > 0:
-            if self.val_to_piece(self.board[diag2])[1] != colour:
+        if in_front[1] < 7 and self.board[diag2]:
+            if self.board[diag2].colour != colour:
                 fields.append(diag2)
 
         # En passant
@@ -301,7 +287,7 @@ class Chess:
                 continue
 
             if self.board[tar] > 0:
-                if self.val_to_piece(self.board[tar])[1] == colour:
+                if self.val_to_piece(self.board[tar]).colour == colour:
                     continue
             fields.append(tar)
         return fields
@@ -320,13 +306,11 @@ class Chess:
                 if not cur[0] in ranks.values() or \
                         not cur[1] in files.values():
                     break
-                tar_val = self.board[cur]
-                if tar_val > 0:
-                    if self.val_to_piece(tar_val)[1] == colour:
-                        break
-                    else:
+                tar = self.board[cur]
+                if tar:
+                    if tar.colour != colour:
                         fields.append(cur)
-                        break
+                    break
                 fields.append(cur)
         return fields
 
@@ -345,13 +329,11 @@ class Chess:
                 if not cur[0] in ranks.values() or \
                         not cur[1] in files.values():
                     break
-                tar_val = self.board[cur]
-                if tar_val > 0:
-                    if self.val_to_piece(tar_val)[1] == colour:
-                        break
-                    else:
+                tar = self.board[cur]
+                if tar:
+                    if tar.colour != colour:
                         fields.append(cur)
-                        break
+                    break
                 fields.append(cur)
         return fields
 
@@ -359,21 +341,21 @@ class Chess:
         fields = []
         for i in range(start[0] - 1, start[0] + 1):
             for j in range(start[1] - 1, start[1] + 1):
-                tar_val = self.board[i, j]
-                if tar_val > 0:
-                    if self.val_to_piece(tar_val)[1] == colour:
-                        continue
+                if self.board[i, j] and self.board[i, j].colour == colour:
+                    continue
                 fields.append(tuple([i, j]))
         return fields
 
     def in_check(self, colour) -> bool:
+        for idx, val in enumerate(self.board):
+            if val.colour == colour and val.type == PieceType.KING:
+                print(idx)
         # find the kings square
-        king_coor = tuple(i[0] for i in np.where(self.board == Piece.KING + colour))
-
+        king_coor = [i for i, k in enumerate(self.board) if k.colour == colour and k.type == PieceType.KING]
         # find all pieces of opposite colour
         for c in [tuple(i) for i in
                   np.transpose(
-                      np.where(np.logical_and(abs(colour - 64) < self.board, self.board < abs(colour - 64) + 64)))]:
+                      np.where(self.board != colour))]:
             # if the king can be taken by any piece, the move is illegal
             if king_coor in self._reachable_fields(c):
                 return True
