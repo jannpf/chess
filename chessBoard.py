@@ -106,22 +106,20 @@ class BoardGui(tk.Frame):
             for letter, nato in letters.items():
                 text = text.replace(nato, letter)
 
-            text = text.replace(' ', '')
+            text_trimmed = text.replace(' ', '')
 
-            if len(text) < 4:
+            if len(text_trimmed) < 4:
                 raise InvalidSquare
             else:
-                start = self.chess.str_to_coor(text[0:2])
-                end = self.chess.str_to_coor(text[2:4])
+                start = self.chess.str_to_coor(text_trimmed[0:2])
+                end = self.chess.str_to_coor(text_trimmed[2:4])
                 self.exec_move(start, end)
         except InvalidSquare:
-            self.update_label(f'Move not recognized: {text}')
-        except sr.UnknownValueError:
-            self.update_label("Google Speech Recognition could not understand audio")
+            self.update_label(f'Move not recognized: "{text}"')
+        except sr.UnknownValueError or sr.WaitTimeoutError:
+            self.update_label("Could not understand audio")
         except sr.RequestError as e:
             self.update_label("Could not request results from Google Speech Recognition service; {0}".format(e))
-        except sr.WaitTimeoutError:
-            self.update_label('Timeout reached')
 
     def exec_move(self, start, end):
         try:
@@ -170,6 +168,7 @@ class BoardGui(tk.Frame):
     def reset(self):
         self.canvas.delete('last_move')
         self.chess.load_start()
+        self.update_label('White to move')
         self.draw_pieces()
 
     def coor_to_square_center(self, coor) -> tuple:

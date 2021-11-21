@@ -80,8 +80,13 @@ class Chess:
     toMove = Colour.WHITE
     enPassantTarget = None
     lastFen = ''
-    blackCastle = True
-    whiteCastle = True
+    long_castle = dict()
+    long_castle[Colour.WHITE] = True
+    long_castle[Colour.BLACK] = True
+    short_castle = dict()
+    short_castle[Colour.WHITE] = True
+    short_castle[Colour.BLACK] = True
+
     check = False
 
     def move(self, start: tuple, end: tuple):
@@ -103,6 +108,15 @@ class Chess:
         if p[0] == Piece.PAWN and abs(end[0] - start[0]) == 2:
             self.enPassantTarget = end
 
+        # Remove castling privileges when either the rook or king has moved
+        if p[0] == Piece.KING:
+            self.long_castle[p[1]] = self.short_castle[p[1]] = False
+
+        if start in map(self.str_to_coor, ('A1', 'A8')):
+            self.long_castle[p[1]] = False
+        if start in map(self.str_to_coor, ('H1', 'H8')):
+            self.short_castle[p[1]] = False
+
         # end move
         if self.toMove == Colour.BLACK:
             self.toMove = Colour.WHITE
@@ -118,6 +132,14 @@ class Chess:
         # Remove pawn if taken en passant
         if self.board[end] == 0 and p[0] == Piece.PAWN and end[1] != start[1]:
             self.board[self.enPassantTarget] = 0
+
+        # Place rook when castling
+        if p[0] == Piece.KING and end[1] - start[1] == 2:
+            self.board[(start[0], start[1] + 1)] = self.board[(start[0], 7)]
+            self.board[(start[0], 7)] = 0
+        if p[0] == Piece.KING and end[1] - start[1] == -2:
+            self.board[(start[0], start[1] - 1)] = self.board[(start[0], 0)]
+            self.board[(start[0], 0)] = 0
 
         self.board[end] = self.board[start]
         self.board[start] = 0
@@ -153,6 +175,18 @@ class Chess:
         if not p:
             return lm
 
+        # add castling fields
+        if p[0] == Piece.KING:
+            if self.short_castle[p[1]] and \
+                    self.board[(coordinate[0], coordinate[1] + 1)] == 0 and \
+                    self.board[(coordinate[0], coordinate[1] + 2)] == 0:
+                rf.append((coordinate[0], coordinate[1] + 2))
+            if self.long_castle[p[1]] and \
+                    self.board[(coordinate[0], coordinate[1] - 1)] == 0 and \
+                    self.board[(coordinate[0], coordinate[1] - 2)] == 0 and \
+                    self.board[(coordinate[0], coordinate[1] - 3)] == 0:
+                rf.append((coordinate[0], coordinate[1] - 2))
+
         for f in rf:
             # temporarily execute the move
             self._push_move(coordinate, f, p)
@@ -164,10 +198,25 @@ class Chess:
             # revert the move
             self._pop_move()
 
+        # castling is not allowed through a check field
+        if p[0] == Piece.KING:
+            if (coordinate[0], coordinate[1] + 2) in lm and \
+                    (coordinate[0], coordinate[1] + 1) not in lm:
+                lm.remove((coordinate[0], coordinate[1] + 2))
+            if (coordinate[0], coordinate[1] - 2) in lm and \
+                    (coordinate[0], coordinate[1] - 1) not in lm:
+                lm.remove((coordinate[0], coordinate[1] - 2))
+
         return lm
 
     def load_start(self):
         self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
+        self.toMove = Colour.WHITE
+        self.short_castle[Colour.WHITE] = True
+        self.short_castle[Colour.BLACK] = True
+        self.long_castle[Colour.WHITE] = True
+        self.long_castle[Colour.BLACK] = True
+        self.enPassantTarget = None
 
     def set_fen(self, fen: str):
         self.board = np.zeros((8, 8), dtype=np.uint8)
@@ -359,8 +408,8 @@ class Chess:
 
     def _king_fields(self, start, colour) -> list:
         fields = []
-        for i in range(start[0] - 1, start[0] + 1):
-            for j in range(start[1] - 1, start[1] + 1):
+        for i in range(max(start[0] - 1, 0), min(start[0] + 2, 8)):
+            for j in range(max(start[1] - 1, 0), min(start[1] + 2, 8)):
                 tar_val = self.board[i, j]
                 if tar_val > 0:
                     if self.val_to_piece(tar_val)[1] == colour:
