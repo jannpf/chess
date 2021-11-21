@@ -16,7 +16,7 @@ class NoPiecePresent(ChessException):
 
 
 class IllegalMove(ChessException):
-    """The given move is illegal"""""
+    """The given move is illegal"""
 
 
 class InvalidSquare(ChessException):
@@ -64,11 +64,12 @@ pieceValues['B'] = Piece.BISHOP + Colour.WHITE
 pieceValues['R'] = Piece.ROOK + Colour.WHITE
 pieceValues['Q'] = Piece.QUEEN + Colour.WHITE
 pieceValues['K'] = Piece.KING + Colour.WHITE
-
-bPieces = dict()
-for x, y in pieceValues.items():
-    bPieces[str.lower(x)] = y + Colour.BLACK
-pieceValues.update(bPieces)
+pieceValues['p'] = Piece.PAWN + Colour.BLACK
+pieceValues['n'] = Piece.KNIGHT + Colour.BLACK
+pieceValues['b'] = Piece.BISHOP + Colour.BLACK
+pieceValues['r'] = Piece.ROOK + Colour.BLACK
+pieceValues['q'] = Piece.QUEEN + Colour.BLACK
+pieceValues['k'] = Piece.KING + Colour.BLACK
 
 # reverse version of the pieces dict
 valuePieces = {v: k for k, v in pieceValues.items()}
@@ -83,10 +84,7 @@ class Chess:
     whiteCastle = True
     check = False
 
-    def move(self, start_not: str, end_not: str):
-        start = self.str_to_coor(start_not)
-        end = self.str_to_coor(end_not)
-
+    def move(self, start: tuple, end: tuple):
         p = self.val_to_piece(self.board[start])
 
         if not p:
@@ -95,7 +93,7 @@ class Chess:
         if p[1] != self.toMove:
             raise NotYourTurn('{colour} to move'.format(colour='White' if self.toMove == Colour.WHITE else 'Black'))
 
-        if end_not not in self.legal_moves(start_not):
+        if end not in self.legal_moves(start):
             raise IllegalMove('Illegal move')
 
         self._push_move(start, end, p)
@@ -148,9 +146,8 @@ class Chess:
             fields = self._king_fields(coordinate, p[1])
         return fields
 
-    def legal_moves(self, square_not: str):
+    def legal_moves(self, coordinate: tuple) -> list:
         lm = []
-        coordinate = self.str_to_coor(square_not)
         rf = self._reachable_fields(coordinate)
         p = self.val_to_piece(self.board[coordinate])
         if not p:
@@ -167,7 +164,7 @@ class Chess:
             # revert the move
             self._pop_move()
 
-        return [self.coor_to_str(i) for i in lm]
+        return lm
 
     def load_start(self):
         self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
@@ -209,6 +206,9 @@ class Chess:
 
         return '/'.join(fen_ranks)
 
+    def get_piece(self, coordinate: tuple) -> tuple or None:
+        return self.val_to_piece(self.board[coordinate])
+
     def __repr__(self) -> str:
         layout = ""
         for r in reversed(self.board):
@@ -223,7 +223,7 @@ class Chess:
     @staticmethod
     def str_to_coor(square_not: str) -> tuple:
         try:
-            file = files[square_not[0]]
+            file = files[str.upper(square_not[0])]
             rank = ranks[square_not[1]]
         except KeyError:
             raise InvalidSquare(f'Invalid square: {square_not}')
@@ -239,7 +239,9 @@ class Chess:
         return str(file) + str(rank)
 
     @staticmethod
-    def val_to_piece(value: int) -> tuple:
+    def val_to_piece(value: int) -> tuple or None:
+        if value == 0:
+            return None
         if value > 64:
             c = Colour.BLACK
         else:
