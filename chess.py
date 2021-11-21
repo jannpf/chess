@@ -214,18 +214,14 @@ class Chess:
         return lm
 
     def load_start(self):
-        self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
-        self.toMove = Colour.WHITE
-        self.short_castle[Colour.WHITE] = True
-        self.short_castle[Colour.BLACK] = True
-        self.long_castle[Colour.WHITE] = True
-        self.long_castle[Colour.BLACK] = True
-        self.enPassantTarget = None
+        self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -')
 
     def set_fen(self, fen: str):
+        fen_blocks = fen.strip().split(' ')
+
         self.board = np.zeros((8, 8), dtype=np.uint8)
 
-        fen_ranks = fen.split('/')
+        fen_ranks = fen_blocks[0].split('/')
         rank = 0
         for r in reversed(fen_ranks):
             file = 0
@@ -238,7 +234,23 @@ class Chess:
                     file += 1
             rank += 1
 
+        # Set active Colour
+        if fen_blocks[1] == 'w':
+            self.toMove = Colour.WHITE
+        elif fen_blocks[1] == 'b':
+            self.toMove = Colour.BLACK
+
+        # Castling availability
+        self.short_castle[Colour.WHITE] = True if 'K' in fen_blocks[2] else False
+        self.long_castle[Colour.WHITE] = True if 'Q' in fen_blocks[2] else False
+        self.short_castle[Colour.BLACK] = True if 'k' in fen_blocks[2] else False
+        self.long_castle[Colour.BLACK] = True if 'q' in fen_blocks[2] else False
+
+        if fen_blocks[3] != '-':
+            self.enPassantTarget = self.str_to_coor(fen_blocks[3])
+
     def get_fen(self) -> str:
+        fen = []
         fen_ranks = []
 
         for rank in reversed(self.board):
@@ -257,7 +269,26 @@ class Chess:
                 r += str(zeros)
             fen_ranks.append(r)
 
-        return '/'.join(fen_ranks)
+        fen.append('/'.join(fen_ranks))
+        fen.append('w' if self.toMove == Colour.WHITE else 'b')
+
+        castling_avail = ''
+        if self.short_castle[Colour.WHITE]:
+            castling_avail += 'K'
+        if self.long_castle[Colour.WHITE]:
+            castling_avail += 'Q'
+        if self.short_castle[Colour.BLACK]:
+            castling_avail += 'k'
+        if self.long_castle[Colour.BLACK]:
+            castling_avail += 'q'
+
+        if castling_avail == '':
+            castling_avail = '-'
+        fen.append(castling_avail)
+
+        fen.append('-' if self.enPassantTarget is None else self.coor_to_str(self.enPassantTarget))
+
+        return ' '.join(fen)
 
     def get_piece(self, coordinate: tuple) -> tuple or None:
         return self.val_to_piece(self.board[coordinate])
