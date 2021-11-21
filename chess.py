@@ -103,10 +103,14 @@ class Chess:
 
         self._push_move(start, end, p)
 
-        # Clear possible en passant target, and add new one
+        # Clear previous en passant target
         self.enPassantTarget = None
-        if p[0] == Piece.PAWN and abs(end[0] - start[0]) == 2:
-            self.enPassantTarget = end
+
+        # Add new en passant target when a double pawn move was made
+        if p[0] == Piece.PAWN and end[0] - start[0] == 2:
+            self.enPassantTarget = (start[0] + 1, start[1])
+        if p[0] == Piece.PAWN and end[0] - start[0] == -2:
+            self.enPassantTarget = (start[0] - 1, start[1])
 
         # Remove castling privileges when either the rook or king has moved
         if p[0] == Piece.KING:
@@ -130,8 +134,8 @@ class Chess:
         self.lastFen = self.get_fen()
 
         # Remove pawn if taken en passant
-        if self.board[end] == 0 and p[0] == Piece.PAWN and end[1] != start[1]:
-            self.board[self.enPassantTarget] = 0
+        if p[0] == Piece.PAWN and end == self.enPassantTarget:
+            self.board[start[0], self.enPassantTarget[1]] = 0
 
         # Place rook when castling
         if p[0] == Piece.KING and end[1] - start[1] == 2:
@@ -334,10 +338,8 @@ class Chess:
                 fields.append(diag2)
 
         # En passant
-        if (start[0], start[1] + 1) == self.enPassantTarget:
-            fields.append((in_front[0], start[1] + 1))
-        if (start[0], start[1] - 1) == self.enPassantTarget:
-            fields.append(tuple([in_front[0], start[1] - 1]))
+        if self.enPassantTarget in (diag1, diag2):
+            fields.append(self.enPassantTarget)
 
         return fields
 
