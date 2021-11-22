@@ -87,9 +87,13 @@ class Chess:
     short_castle[Colour.WHITE] = True
     short_castle[Colour.BLACK] = True
 
+    halfMoveClock = 0
+    moveCounter = 1
+
     check = False
 
     def move(self, start: tuple, end: tuple):
+        capture = False
         p = self.val_to_piece(self.board[start])
 
         if not p:
@@ -100,6 +104,10 @@ class Chess:
 
         if end not in self.legal_moves(start):
             raise IllegalMove('Illegal move')
+
+        # For fifty move rule
+        if self.board[end] != 0:
+            capture = True
 
         self._push_move(start, end, p)
 
@@ -127,8 +135,13 @@ class Chess:
         else:
             self.toMove = Colour.BLACK
 
-        if self.in_check(self.toMove):
-            self.check = True
+        if capture or p[0] == Piece.PAWN:
+            self.halfMoveClock = 0
+        else:
+            self.halfMoveClock += 1
+
+        if self.toMove == Colour.WHITE:
+            self.moveCounter += 1
 
     def _push_move(self, start: tuple, end: tuple, p):
         self.lastFen = self.get_fen()
@@ -214,10 +227,12 @@ class Chess:
         return lm
 
     def load_start(self):
-        self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -')
+        self.set_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 
     def set_fen(self, fen: str):
         fen_blocks = fen.strip().split(' ')
+        if len(fen_blocks) != 6:
+            raise ChessException('Invalid FEN')
 
         self.board = np.zeros((8, 8), dtype=np.uint8)
 
@@ -248,6 +263,9 @@ class Chess:
 
         if fen_blocks[3] != '-':
             self.enPassantTarget = self.str_to_coor(fen_blocks[3])
+
+        self.halfMoveClock = int(fen_blocks[4])
+        self.moveCounter = int(fen_blocks[5])
 
     def get_fen(self) -> str:
         fen = []
@@ -287,6 +305,9 @@ class Chess:
         fen.append(castling_avail)
 
         fen.append('-' if self.enPassantTarget is None else self.coor_to_str(self.enPassantTarget))
+
+        fen.append(str(self.halfMoveClock))
+        fen.append(str(self.moveCounter))
 
         return ' '.join(fen)
 
