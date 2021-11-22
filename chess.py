@@ -92,7 +92,7 @@ class Chess:
 
     check = False
 
-    def move(self, start: tuple, end: tuple):
+    def move(self, start: tuple, end: tuple, promote_to: Piece = Piece.QUEEN):
         capture = False
         p = self.val_to_piece(self.board[start])
 
@@ -109,7 +109,7 @@ class Chess:
         if self.board[end] != 0:
             capture = True
 
-        self._push_move(start, end, p)
+        self._push_move(start, end, p, promote_to)
 
         # Clear previous en passant target
         self.enPassantTarget = None
@@ -143,7 +143,7 @@ class Chess:
         if self.toMove == Colour.WHITE:
             self.moveCounter += 1
 
-    def _push_move(self, start: tuple, end: tuple, p):
+    def _push_move(self, start: tuple, end: tuple, p, promote_to: Piece = Piece.QUEEN):
         self.lastFen = self.get_fen()
 
         # Remove pawn if taken en passant
@@ -160,6 +160,10 @@ class Chess:
 
         self.board[end] = self.board[start]
         self.board[start] = 0
+
+        # Promote Pawn if at the end of the board
+        if p[0] == Piece.PAWN and end[0] in (0, 7):
+            self.board[end] = self.piece_to_val(promote_to, p[1])
 
     def _pop_move(self):
         self.set_fen(self.lastFen)
