@@ -1,5 +1,5 @@
 from enum import IntFlag
-
+from collections import Counter
 import numpy as np
 
 
@@ -23,6 +23,14 @@ class InvalidSquare(ChessException):
     """The square is out of the boundaries of the chess board"""
 
 
+class DrawException(ChessException):
+    """The game is over: draw"""
+
+
+class CheckmateException(ChessException):
+    """The game is over: checkmate"""
+
+
 class Piece(IntFlag):
     PAWN = 1
     KNIGHT = 2
@@ -35,6 +43,18 @@ class Piece(IntFlag):
 class Colour(IntFlag):
     WHITE = 0
     BLACK = 64
+
+    def opposite(self):
+        if self == Colour.WHITE:
+            return Colour.BLACK
+        else:
+            return Colour.WHITE
+
+    def __str__(self):
+        if self == 0:
+            return 'White'
+        else:
+            return 'Black'
 
 
 files = dict()
@@ -77,9 +97,11 @@ valuePieces = {v: k for k, v in pieceValues.items()}
 
 class Chess:
     board = np.zeros((8, 8), dtype=np.uint8)
+    moves = dict()
+
     toMove = Colour.WHITE
     enPassantTarget = None
-    lastFen = ''
+
     long_castle = dict()
     long_castle[Colour.WHITE] = True
     long_castle[Colour.BLACK] = True
@@ -90,7 +112,7 @@ class Chess:
     halfMoveClock = 0
     moveCounter = 1
 
-    check = False
+    lastFen = ''
 
     def move(self, start: tuple, end: tuple, promote_to: Piece = Piece.QUEEN):
         capture = False
@@ -100,7 +122,7 @@ class Chess:
             raise NoPiecePresent('No piece present')
 
         if p[1] != self.toMove:
-            raise NotYourTurn('{colour} to move'.format(colour='White' if self.toMove == Colour.WHITE else 'Black'))
+            raise NotYourTurn(f'{p[1]} to move')
 
         if end not in self.legal_moves(start):
             raise IllegalMove('Illegal move')
@@ -129,11 +151,7 @@ class Chess:
         if start in map(self.str_to_coor, ('H1', 'H8')):
             self.short_castle[p[1]] = False
 
-        # end move
-        if self.toMove == Colour.BLACK:
-            self.toMove = Colour.WHITE
-        else:
-            self.toMove = Colour.BLACK
+        self.toMove = self.toMove.opposite()
 
         if capture or p[0] == Piece.PAWN:
             self.halfMoveClock = 0
@@ -143,7 +161,27 @@ class Chess:
         if self.toMove == Colour.WHITE:
             self.moveCounter += 1
 
+        # Record move
+        self.moves[self._half_move_counter] = self.get_fen()
+
+        # Win / Draw Categories
+        if self._repetition():
+            raise DrawException('Threefold repetition: Draw!')
+
+        legal_moves = 0
+        for piece_coors in self._get_pieces_by_colour(self.toMove):
+            legal_moves += len(self.legal_moves(piece_coors))
+        if legal_moves == 0:
+            if self.in_check(self.toMove):
+                raise CheckmateException(f'Checkmate: {self.toMove.opposite()} wins!')
+            else:
+                raise DrawException('Stalemate: Draw!')
+
+        if self.halfMoveClock >= 50:
+            raise DrawException('Fifty move rule: Draw!')
+
     def _push_move(self, start: tuple, end: tuple, p, promote_to: Piece = Piece.QUEEN):
+        """Execute a move on the board"""
         self.lastFen = self.get_fen()
 
         # Remove pawn if taken en passant
@@ -166,6 +204,7 @@ class Chess:
             self.board[end] = self.piece_to_val(promote_to, p[1])
 
     def _pop_move(self):
+        """Revert the last modification to the board"""
         self.set_fen(self.lastFen)
 
     def _reachable_fields(self, coordinate: tuple):
@@ -271,6 +310,8 @@ class Chess:
         self.halfMoveClock = int(fen_blocks[4])
         self.moveCounter = int(fen_blocks[5])
 
+        self.moves[self._half_move_counter] = fen
+
     def get_fen(self) -> str:
         fen = []
         fen_ranks = []
@@ -315,8 +356,36 @@ class Chess:
 
         return ' '.join(fen)
 
+    def revert_move(self):
+        """Revert the last executed move"""
+        if (self.moveCounter - 1) in self.moves.keys():
+            self.set_fen(self.moves[self._half_move_counter - 1])
+        else:
+            self.load_start()
+
     def get_piece(self, coordinate: tuple) -> tuple or None:
-        return self.val_to_piece(self.board[coordinate])
+        try:
+            return self.val_to_piece(self.board[coordinate])
+        except IndexError:
+            return None
+
+    @property
+    def _half_move_counter(self):
+        if self.toMove == Colour.WHITE:
+            return (self.moveCounter - 1) * 2
+        else:
+            return (self.moveCounter - 1) * 2 + 1
+
+    def _repetition(self) -> bool:
+        # get all fen strings without the counters
+        board_state = list(map(lambda x: x.split(' ')[:3], self.moves.values()))
+        current = self.moves[self._half_move_counter].split(' ')[:3]
+
+        # if a position was repeated 3 times -> draw
+        count = board_state.count(current)
+        if count > 2:
+            return True
+        return False
 
     def __repr__(self) -> str:
         layout = ""
@@ -475,14 +544,19 @@ class Chess:
                 fields.append(tuple([i, j]))
         return fields
 
+    def _get_pieces_by_colour(self, colour: Colour) -> list:
+        return [tuple(i) for i in
+                np.transpose(
+                    np.where(
+                        np.logical_and(self.board > colour,
+                                       self.board < colour + 64)))]
+
     def in_check(self, colour) -> bool:
         # find the kings square
         king_coor = tuple(i[0] for i in np.where(self.board == Piece.KING + colour))
 
         # find all pieces of opposite colour
-        for c in [tuple(i) for i in
-                  np.transpose(
-                      np.where(np.logical_and(abs(colour - 64) < self.board, self.board < abs(colour - 64) + 64)))]:
+        for c in self._get_pieces_by_colour(colour.opposite()):
             # if the king can be taken by any piece, the move is illegal
             if king_coor in self._reachable_fields(c):
                 return True
