@@ -1,5 +1,5 @@
 from enum import IntFlag
-from collections import Counter
+import re
 import numpy as np
 
 
@@ -114,7 +114,7 @@ class Chess:
 
     lastFen = ''
 
-    def move(self, start: tuple, end: tuple, promote_to: Piece = Piece.QUEEN):
+    def move(self, start: tuple, end: tuple, promote_to: Piece = Piece.QUEEN) -> tuple:
         capture = False
         p = self.val_to_piece(self.board[start])
 
@@ -179,6 +179,59 @@ class Chess:
 
         if self.halfMoveClock >= 50:
             raise DrawException('Fifty move rule: Draw!')
+
+        return start, end
+
+    def move_notation(self, notation: str) -> tuple:
+        """Move in algebraic notation"""
+        # Castling king side
+        if 'O-O' == notation:
+            if self.toMove == Colour.WHITE:
+                return self.move(self.str_to_coor('E1'), self.str_to_coor('G1'))
+            else:
+                return self.move(self.str_to_coor('E8'), self.str_to_coor('G8'))
+
+        # Castling queen side
+        if 'O-O-O' == notation:
+            if self.toMove == Colour.WHITE:
+                return self.move(self.str_to_coor('E1'), self.str_to_coor('C1'))
+            else:
+                return self.move(self.str_to_coor('E8'), self.str_to_coor('C8'))
+
+        match = re.search('^([KQBNR])?([abcdefg])?([12345678])?x?([abcdefgh][12345678])', notation)
+
+        if match is None:
+            raise ChessException('Invalid move')
+
+        eligible_pieces = []
+
+        piece_str = match.group(1)
+        dis_file = None if match.group(2) is None or piece_str is None else files[match.group(2).upper()]
+        dis_rank = None if match.group(3) is None else ranks[match.group(3)]
+        dest = self.str_to_coor(match.group(4))
+
+        # Pawn moves dont have a piece declaration
+        if piece_str is None:
+            piece_str = 'P'
+
+        if self.toMove == Colour.BLACK:
+            piece_str = piece_str.lower()
+        for i in np.transpose(np.where(self.board == pieceValues[piece_str])):
+            if dest in self.legal_moves(tuple(i)):
+                eligible_pieces.append(tuple(i))
+
+        if len(eligible_pieces) > 1:
+            if dis_rank is not None:
+                eligible_pieces[:] = [x for x in eligible_pieces if x[0] == dis_rank]
+            if dis_file is not None:
+                eligible_pieces[:] = [x for x in eligible_pieces if x[1] == dis_file]
+
+        if len(eligible_pieces) == 0:
+            raise ChessException('Illegal move')
+        if len(eligible_pieces) > 1:
+            raise ChessException('Ambiguous move')
+
+        return self.move(eligible_pieces[0], dest)
 
     def _push_move(self, start: tuple, end: tuple, p, promote_to: Piece = Piece.QUEEN):
         """Execute a move on the board"""

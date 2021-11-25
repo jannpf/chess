@@ -45,29 +45,43 @@ class BoardGui(tk.Frame):
         canvas_height = self.rows * square_size
 
         tk.Frame.__init__(self, parent)
-        self.canvas = tk.Canvas(self, width=canvas_width, height=canvas_height, background='grey')
-        self.canvas.pack(side='top', fill='both', anchor='c', expand=True)
 
+        # canvas for board
+        self.canvas = tk.Canvas(self, width=canvas_width, height=canvas_height, background='grey')
+        self.canvas.pack(side='left', fill='both', anchor='c', expand=True)
         self.board_layout = ImageTk.PhotoImage(Image.open('img/board.png').resize((canvas_width, canvas_height)))
         self.canvas.create_image(1, 1, image=self.board_layout, tags='board', anchor='nw')
+        self.canvas.bind('<Button>', self.click)
 
-        self.canvas.bind('<Button-1>', self.click)
+        self.label_message = tk.Label(text='Hi!', fg='black')
+        self.label_message.pack(side=tk.TOP, padx=5, pady=20, expand=0)
 
-        self.control_bar = tk.Frame(self, height=64)
+        # controls
+        self.control_bar = tk.Frame(self)
 
-        self.btn_reset = tk.Button(self.control_bar, text='Reset', fg='black', command=self.reset)
-        self.btn_reset.pack(side=tk.LEFT, in_=self.control_bar)
+        self.move_bar = tk.Frame(self, height=64)
 
-        self.btn_dictate = tk.Button(self.control_bar, text='Dictate', fg='black', command=self.dictate_move)
-        self.btn_dictate.pack(side=tk.LEFT, in_=self.control_bar)
+        self.move_input_field = tk.Entry(self.move_bar)
+        self.move_input_field.pack(side=tk.TOP, padx=5, pady=5, in_=self.move_bar)
 
-        self.label_message = tk.Label(self.control_bar, text='Hi!', fg='black')
-        self.label_message.pack(side=tk.LEFT, expand=0, in_=self.control_bar)
+        self.btn_revert = tk.Button(self.move_bar, text='Revert move', fg='black', command=self.revert_move)
+        self.btn_revert.pack(side=tk.RIGHT, padx=5, pady=20, in_=self.move_bar)
 
-        self.button_quit = tk.Button(self.control_bar, text='Quit', fg='black', command=self.parent.destroy)
-        self.button_quit.pack(side=tk.RIGHT, in_=self.control_bar)
+        self.btn_enter = tk.Button(self.move_bar, text='Enter', fg='black', command=self.enter_move)
+        self.btn_enter.pack(side=tk.LEFT, pady=5, in_=self.move_bar)
 
-        self.control_bar.pack(expand=False, fill='x', side='bottom')
+        self.btn_dictate = tk.Button(self.move_bar, text='Dictate', fg='black', command=self.dictate_move)
+        self.btn_dictate.pack(side=tk.RIGHT, pady=5, in_=self.move_bar)
+
+        self.move_bar.pack(expand=True, fill='both', side='top', in_=self.control_bar)
+
+        self.btn_reset = tk.Button(self.control_bar, text='Reset', fg='black', anchor='s', command=self.reset)
+        self.btn_reset.pack(side=tk.LEFT, padx=5, pady=20, in_=self.control_bar)
+
+        self.button_quit = tk.Button(self.control_bar, text='Quit', fg='black', anchor='s', command=self.parent.destroy)
+        self.button_quit.pack(side=tk.RIGHT, padx=5, pady=20, in_=self.control_bar)
+
+        self.control_bar.pack(expand=False, fill='x', side='right')
 
         for p in pieceValues:
             colour = 'white' if p.isupper() else 'black'
@@ -81,14 +95,20 @@ class BoardGui(tk.Frame):
         row = math.floor(8 - (event.y / self.square_size))
         clicked = tuple([row, col])
 
-        self.canvas.delete('move')
+        self.canvas.delete('legal_moves')
 
         if self.chess.get_piece(clicked) is not None and \
                 self.chess.get_piece(clicked)[1] == self.chess.toMove:
             self.selected_piece = clicked
-            self.draw_moves(self.chess.legal_moves(clicked))
+            self.draw_legal_moves(self.chess.legal_moves(clicked))
         elif self.selected_piece:
-            self.exec_move(self.selected_piece, clicked)
+            try:
+                self.chess.move(self.selected_piece, clicked)
+                self.draw_move(self.selected_piece, clicked)
+            except IllegalMove as e:
+                self.update_label(str(e))
+            except ChessException as e:
+                self.update_label(str(e))
 
     def dictate_move(self):
         text = ''
@@ -121,21 +141,28 @@ class BoardGui(tk.Frame):
         except sr.RequestError as e:
             self.update_label("Could not request results from Google Speech Recognition service; {0}".format(e))
 
-    def exec_move(self, start, end):
+    def enter_move(self):
+        move_not = self.move_input_field.get()
+        if input == '':
+            return
         try:
-            self.chess.move(start, end)
-
-            # indicate last move
-            self.canvas.delete('last_move')
-            self.colour_square(start, 'yellow2', 'last_move')
-            self.colour_square(end, 'yellow3', 'last_move')
-
-            self.update_label('White to move' if self.chess.toMove == Colour.WHITE else 'Black to move')
+            squares = self.chess.move_notation(move_not)
+            self.draw_move(squares[0], squares[1])
         except IllegalMove as e:
             self.update_label(str(e))
         except ChessException as e:
             self.update_label(str(e))
 
+    def revert_move(self):
+        self.update_label('Clack!')
+
+    def draw_move(self, start, end):
+        # indicate last move
+        self.canvas.delete('last_move')
+        self.colour_square(start, 'yellow2', 'last_move')
+        self.colour_square(end, 'yellow3', 'last_move')
+
+        self.update_label('White to move' if self.chess.toMove == Colour.WHITE else 'Black to move')
         self.selected_piece = None
         self.draw_pieces()
 
@@ -152,11 +179,11 @@ class BoardGui(tk.Frame):
                                          tags=(piece_tag, 'piece'),
                                          anchor='c')
 
-    def draw_moves(self, coors):
+    def draw_legal_moves(self, coors):
         w = self.square_size / 10
         for c in map(self.coor_to_square_center, coors):
             self.canvas.create_oval(c[0] - w, c[1] - w, c[0] + w, c[1] + w, fill='yellow green', outline='yellow green',
-                                    tags='move')
+                                    tags='legal_moves')
 
     def colour_square(self, coor, colour, tag):
         x0 = coor[1] * self.square_size + 1
@@ -167,6 +194,7 @@ class BoardGui(tk.Frame):
 
     def reset(self):
         self.canvas.delete('last_move')
+        self.canvas.delete('legal_moves')
         self.chess.load_start()
         self.update_label('White to move')
         self.draw_pieces()
