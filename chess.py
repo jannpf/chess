@@ -201,7 +201,7 @@ class Chess:
         match = re.search('^([KQBNR])?([abcdefg])?([12345678])?x?([abcdefgh][12345678])', notation)
 
         if match is None:
-            raise ChessException('Invalid move')
+            raise ChessException(f'Invalid move: {notation}')
 
         eligible_pieces = []
 
@@ -227,9 +227,9 @@ class Chess:
                 eligible_pieces[:] = [x for x in eligible_pieces if x[1] == dis_file]
 
         if len(eligible_pieces) == 0:
-            raise ChessException('Illegal move')
+            raise ChessException(f'Illegal move: {notation}')
         if len(eligible_pieces) > 1:
-            raise ChessException('Ambiguous move')
+            raise ChessException(f'Ambiguous move: {notation}')
 
         return self.move(eligible_pieces[0], dest)
 
@@ -359,6 +359,8 @@ class Chess:
 
         if fen_blocks[3] != '-':
             self.enPassantTarget = self.str_to_coor(fen_blocks[3])
+        else:
+            self.enPassantTarget = None
 
         self.halfMoveClock = int(fen_blocks[4])
         self.moveCounter = int(fen_blocks[5])
@@ -411,7 +413,7 @@ class Chess:
 
     def revert_move(self):
         """Revert the last executed move"""
-        if (self.moveCounter - 1) in self.moves.keys():
+        if (self._half_move_counter - 1) in self.moves.keys():
             self.set_fen(self.moves[self._half_move_counter - 1])
         else:
             self.load_start()

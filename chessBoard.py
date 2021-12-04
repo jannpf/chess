@@ -5,24 +5,52 @@ from chess import *
 import speech_recognition as sr
 
 numbers = dict()
-numbers[1] = 'one'
-numbers[2] = 'two'
-numbers[3] = 'three'
-numbers[4] = 'four'
-numbers[5] = 'five'
-numbers[6] = 'six'
-numbers[7] = 'seven'
-numbers[8] = 'eight'
+numbers['one'] = 1
+numbers['two'] = 2
+numbers['three'] = 3
+numbers['four'] = 4
+numbers['five'] = 5
+numbers['six'] = 6
+numbers['seven'] = 7
+numbers['eight'] = 8
 
 letters = dict()
-letters['a'] = 'alpha'
-letters['b'] = 'bravo'
-letters['c'] = 'charlie'
-letters['d'] = 'delta'
-letters['e'] = 'echo'
-letters['f'] = 'foxtrot'
-letters['g'] = 'golf'
-letters['h'] = 'hotel'
+letters['alpha'] = 'a'
+letters['bravo'] = 'b'
+letters['charlie'] = 'c'
+letters['delta'] = 'd'
+letters['echo'] = 'e'
+letters['ecco'] = 'e'
+letters['foxtrot'] = 'f'
+letters['golf'] = 'g'
+letters['hotel'] = 'h'
+
+pieces = dict()
+pieces['king'] = 'K'
+pieces['queen'] = 'Q'
+pieces['bishop'] = 'B'
+pieces['knight'] = 'N'
+pieces['night'] = 'N'
+pieces['rook'] = 'R'
+
+sensitivity = 0
+keywords = [
+    ('king', sensitivity),
+    ('queen', sensitivity),
+    ('bishop', sensitivity),
+    ('knight', sensitivity),
+    ('rook', sensitivity),
+    ('a', sensitivity),
+    ('b', sensitivity),
+    ('c', sensitivity),
+    ('d', sensitivity),
+    ('e', sensitivity),
+    ('f', sensitivity),
+    ('g', sensitivity),
+    ('h', sensitivity),
+    ('takes', sensitivity),
+    ('castle', sensitivity)
+]
 
 
 class BoardGui(tk.Frame):
@@ -47,14 +75,14 @@ class BoardGui(tk.Frame):
         tk.Frame.__init__(self, parent)
 
         # canvas for board
-        self.canvas = tk.Canvas(self, width=canvas_width, height=canvas_height, background='grey')
+        self.canvas = tk.Canvas(self, width=canvas_width, height=canvas_height)
         self.canvas.pack(side='left', fill='both', anchor='c', expand=True)
         self.board_layout = ImageTk.PhotoImage(Image.open('img/board.png').resize((canvas_width, canvas_height)))
         self.canvas.create_image(1, 1, image=self.board_layout, tags='board', anchor='nw')
         self.canvas.bind('<Button>', self.click)
 
         self.label_message = tk.Label(text='Hi!', fg='black')
-        self.label_message.pack(side=tk.TOP, padx=5, pady=20, expand=0)
+        self.label_message.pack(side=tk.TOP, padx=20, pady=5, expand=0)
 
         # controls
         self.control_bar = tk.Frame(self)
@@ -111,31 +139,41 @@ class BoardGui(tk.Frame):
                 self.update_label(str(e))
 
     def dictate_move(self):
-        text = ''
+        text = text_raw = ''
         try:
             self.update_label('Listening...')
             with sr.Microphone() as source:
                 audio = self.r.listen(source, timeout=5, phrase_time_limit=8)
             self.update_label('Processing...')
-            text = ''.join(self.r.recognize_google(audio)).lower()
+            text_raw = text = ''.join(self.r.recognize_google(audio)).lower()
 
             # remove spaces, replace non-numeric numbers and nato letters
-            for n, ns in numbers.items():
+            for ns, n in numbers.items():
                 text = text.replace(ns, str(n))
 
-            for letter, nato in letters.items():
+            for nato, letter in letters.items():
                 text = text.replace(nato, letter)
+
+            for p, piece in pieces.items():
+                text = text.replace(p, piece)
+
+            text = text.replace('takes', 'x')
+
+            if 'short castle' in text:
+                text = 'O-O'
+            if 'long castle' in text:
+                text = 'O-O-O'
 
             text_trimmed = text.replace(' ', '')
 
-            if len(text_trimmed) < 4:
-                raise InvalidSquare
-            else:
-                start = self.chess.str_to_coor(text_trimmed[0:2])
-                end = self.chess.str_to_coor(text_trimmed[2:4])
-                self.exec_move(start, end)
+            fields = self.chess.move_notation(text_trimmed)
+            self.draw_move(fields[0], fields[1])
+        except IllegalMove as e:
+            self.update_label(str(e))
         except InvalidSquare:
-            self.update_label(f'Move not recognized: "{text}"')
+            self.update_label(f'Move not recognized: "{text}", original: {text_raw}')
+        except ChessException as e:
+            self.update_label(f'{str(e)}, original: {text_raw}')
         except sr.UnknownValueError or sr.WaitTimeoutError:
             self.update_label("Could not understand audio")
         except sr.RequestError as e:
@@ -154,7 +192,11 @@ class BoardGui(tk.Frame):
             self.update_label(str(e))
 
     def revert_move(self):
-        self.update_label('Clack!')
+        self.chess.revert_move()
+        self.canvas.delete('legal_moves')
+        self.canvas.delete('last_move')
+        self.draw_pieces()
+        self.update_label('White to move' if self.chess.toMove == Colour.WHITE else 'Black to move')
 
     def draw_move(self, start, end):
         # indicate last move
