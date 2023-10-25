@@ -1,1 +1,3 @@
 # chess
+
+## Eine ausführlichere Beschreibung

@@ -114,6 +114,7 @@ class Chess:
 
     lastFen = ''
 
+    # this function handles each move
     def move(self, start: tuple, end: tuple, promote_to: Piece = Piece.QUEEN) -> tuple:
         capture = False
         p = self.val_to_piece(self.board[start])
